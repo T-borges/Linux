@@ -5,37 +5,41 @@
 #Script criado para gerenciar backups
 #
 
+DB_USER="root"
+DB="bacula"
+DB_PASS="123456"
+
+
 function cadastrar(){
      echo "Digite o ip: "
      read IP
-     grep "\<$IP\>" banco.txt
-     if [ $? -eq 0 ]; then
-             echo "servidor ja cadastrado"
-            exit
-     fi
-
      echo "Digite os diretorios: "
-     read DIRETORIOS
-     echo "$IP:$DIRETORIOS" >> banco.txt
-
+     iead DIRETORIOS
+     mysql -u$DB_USER -p$DB_PASS $DB -e "insert into servidores(endereco,diretorios) values('$IP','$DIRETORIOS')" 
 }
 function backup(){
-        for LINHA in $(cat /root/codigos/banco.txt); do
-        IP=$( echo $LINHA | cut -f1 -d":")
-        DIRETORIOS=$( echo $LINHA | cut -f2 -d":")
+        mysql -u$DB_USER -p$DB_PASS $DB -se "select * from servidores" > /tmp/select.tmp
+        sed -i "s/\t/:/g" /tmp/select.tmp
+        for LINHA in $(cat /tmp/select.tmp); do
+        IP=$( echo $LINHA | cut -f2 -d":")
+        DIRETORIOS=$( echo $LINHA | cut -f3 -d":")
         echo "Fazendo backup de: "$IP
         echo "Dos diretorios: "$DIRETORIOS
         DATA=$(date +%d_%m_%Y_%H_%M)
-        ssh root@$IP "tar -zcf /tmp/${IP}_${DATA}.tar.gz $DIRETORIOS"
+        ARQUIVO=$(echo "${IP}_${DATA}.tar.gz")
+        INICIO=$(date +"%Y-%m-%d-%H:%M:%S")
+        ssh root@$IP "tar -zcf /tmp/$ARQUIVO $DIRETORIOS"
         scp root@$IP:/tmp/*.tar.gz /backup/
         ssh root@$IP "rm -f /tmp/*.tar.gz"
+        FIM=$(date +"%Y-%m-%d-%H:%M:%S")
         sleep 5
-     
+        mysql -uroot -p123456 backup -e "insert into log(inicio,fim,server,arquivo,status) values('$INICIO','$FIM','$IP','$ARQUIVO','OK')"     
+
      done
 
 }
 function listar(){
-        cat banco.txt
+        mysql -u$DB_USER -p$DB_PASS $DB -e "select * from servidores"
 }
 function remover(){
         echo "Digite o ip do servidor: "
@@ -45,7 +49,7 @@ function remover(){
         read OP
         OP=$(echo $OP | tr [:upper:] [:lower:])
         if [ $OP == "y" ]; then
-        sed -i "/\<$IP\>/d" banco.txt
+            mysql -u$DB_USER -p$DB_PASS $DB -e "delete from servidores where endereco='$IP'"
        fi
 }
 
